@@ -10,6 +10,7 @@ export function YoutubeInfo() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<VideoInfo | null>(null)
+  const [downloadingVideo, setDownloadingVideo] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -86,7 +87,47 @@ export function YoutubeInfo() {
               <ExternalLink className="size-3" aria-hidden="true" />
             </a>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 pt-2 border-t">
+             <Button
+                size="lg"
+                className="w-full h-12 text-base"
+                disabled={downloadingVideo}
+                onClick={async () => {
+                  setDownloadingVideo(true)
+                  try {
+                    const res = await fetch(`/api/youtube/download?url=${encodeURIComponent(url)}`)
+                    if (!res.ok) {
+                      const data = await res.json()
+                      throw new Error(data.error || 'Erreur lors du téléchargement')
+                    }
+                    const blob = await res.blob()
+                    const downloadUrl = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.style.display = 'none'
+                    a.href = downloadUrl
+                    const contentDisposition = res.headers.get('content-disposition')
+                    let filename = `${info.title.replace(/[^\w\s]/gi, '')}.mp4`
+                    if (contentDisposition && contentDisposition.includes('filename=')) {
+                        const match = contentDisposition.match(/filename="?([^"]+)"?/)
+                        if (match?.[1]) filename = match[1]
+                    }
+                    a.download = filename
+                    document.body.appendChild(a)
+                    a.click()
+                    window.URL.revokeObjectURL(downloadUrl)
+                    a.remove()
+                  } catch (err) {
+                    setError(err instanceof Error && err.message ? err.message : 'Une erreur est survenue.')
+                  } finally {
+                    setDownloadingVideo(false)
+                  }
+                }}
+             >
+                {downloadingVideo ? <Loader2 className="mr-2 size-5 animate-spin" /> : <Download className="mr-2 size-5" />}
+                Télécharger la vidéo (MP4)
+             </Button>
+          </div>
+          <div className="flex flex-col gap-2 pt-2 border-t">
             <p className="text-sm font-medium text-muted-foreground">Télécharger la miniature</p>
             <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {THUMBNAIL_QUALITIES.map((q) => (
