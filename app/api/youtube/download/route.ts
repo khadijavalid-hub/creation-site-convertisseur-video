@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ytdl from 'ytdl-core'
+import { Innertube } from 'youtubei.js'
 import { extractVideoId } from '@/lib/youtube'
-import { Readable } from 'stream'
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
@@ -17,27 +16,28 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const info = await ytdl.getInfo(videoId)
-    const title = info.videoDetails.title.replace(/[^\w\s]/gi, '') // Basic sanitization
-
-    // Choose the best video format (with audio if possible, otherwise just highest res)
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' })
-
-    // Create a stream
-    const stream = ytdl(url, { format: format })
-    const webStream = Readable.toWeb(stream)
-
-    // Use NextResponse to return the stream directly
-    const res = new NextResponse(webStream as any, {
-      headers: {
-        'Content-Disposition': `attachment; filename="${title}.mp4"`,
-        'Content-Type': 'video/mp4',
-      },
+    const yt = await Innertube.create({
+      client_type: 'ANDROID',
+      retrieve_player: true,
     })
 
-    return res
+    const info = await yt.getBasicInfo(videoId)
+    const title = info.basic_info.title?.replace(/[^\w\s]/gi, '') || 'video'
+
+    const format = info.chooseFormat({
+      type: 'video+audio',
+      quality: 'best'
+    })
+
+    if (!format || !format.url) {
+        throw new Error("No format found")
+    }
+
+    // Return a direct redirect to avoid proxying the stream and having fetch failures due to YouTube IP protections
+    // Also YouTube's URLs already have the right headers usually
+    return NextResponse.redirect(format.url)
   } catch (error: any) {
     console.error('Erreur de téléchargement YouTube:', error)
-    return NextResponse.json({ error: 'Impossible de télécharger la vidéo' }, { status: 500 })
+    return NextResponse.json({ error: 'Impossible de télécharger la vidéo. La protection bot de YouTube bloque peut-être la requête.' }, { status: 500 })
   }
 }

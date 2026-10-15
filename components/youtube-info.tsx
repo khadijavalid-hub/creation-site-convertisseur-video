@@ -95,27 +95,26 @@ export function YoutubeInfo() {
                 onClick={async () => {
                   setDownloadingVideo(true)
                   try {
-                    const res = await fetch(`/api/youtube/download?url=${encodeURIComponent(url)}`)
-                    if (!res.ok) {
+                    const res = await fetch(`/api/youtube/download?url=${encodeURIComponent(url)}`, { redirect: 'manual' })
+
+                    if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
+                        // Success, we got the redirect URL
+                        const redirectUrl = res.headers.get('location')!
+                        const a = document.createElement('a')
+                        a.style.display = 'none'
+                        a.href = redirectUrl
+                        a.target = '_blank'
+                        a.download = `${info.title.replace(/[^\w\s]/gi, '')}.mp4`
+                        document.body.appendChild(a)
+                        a.click()
+                        a.remove()
+                    } else if (!res.ok) {
                       const data = await res.json()
                       throw new Error(data.error || 'Erreur lors du téléchargement')
+                    } else {
+                        // Fallback just in case we somehow didn't get a redirect but a stream
+                        window.open(`/api/youtube/download?url=${encodeURIComponent(url)}`, '_blank')
                     }
-                    const blob = await res.blob()
-                    const downloadUrl = window.URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.style.display = 'none'
-                    a.href = downloadUrl
-                    const contentDisposition = res.headers.get('content-disposition')
-                    let filename = `${info.title.replace(/[^\w\s]/gi, '')}.mp4`
-                    if (contentDisposition && contentDisposition.includes('filename=')) {
-                        const match = contentDisposition.match(/filename="?([^"]+)"?/)
-                        if (match?.[1]) filename = match[1]
-                    }
-                    a.download = filename
-                    document.body.appendChild(a)
-                    a.click()
-                    window.URL.revokeObjectURL(downloadUrl)
-                    a.remove()
                   } catch (err) {
                     setError(err instanceof Error && err.message ? err.message : 'Une erreur est survenue.')
                   } finally {
