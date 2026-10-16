@@ -21,9 +21,11 @@ export async function GET(req: NextRequest) {
       clientType: 'IOS',
     })
 
-    const { Platform } = await import('youtubei.js').then((m: any) => m.default ? m.default.Utils || m.Utils : m.Utils).catch(async () => {
-         return await import('youtubei.js') as any
-    })
+    const youtubeiExports = await import('youtubei.js');
+    let Platform = (youtubeiExports as any).Utils?.Platform;
+    if (!Platform && youtubeiExports.default) {
+       Platform = (youtubeiExports.default as any).Utils?.Platform;
+    }
 
     // Explicitly setup node runtime `vm` eval for Next.js Server Components since they don't seem to load it by default
     if (Platform && Platform.shim) {
