@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Innertube } from 'youtubei.js'
+import { Innertube, UniversalCache } from 'youtubei.js'
 import { extractVideoId } from '@/lib/youtube'
+import vm from 'vm'
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
@@ -17,25 +18,45 @@ export async function GET(req: NextRequest) {
 
   try {
     const yt = await Innertube.create({
-      client_type: 'ANDROID',
-      retrieve_player: true,
+      clientType: 'IOS',
     })
 
-    const info = await yt.getBasicInfo(videoId)
-    const title = info.basic_info.title?.replace(/[^\w\s]/gi, '') || 'video'
+    const { Platform } = await import('youtubei.js').then((m: any) => m.default ? m.default.Utils || m.Utils : m.Utils).catch(async () => {
+         return await import('youtubei.js') as any
+    })
 
+    // Explicitly setup node runtime `vm` eval for Next.js Server Components since they don't seem to load it by default
+    if (Platform && Platform.shim) {
+      Platform.shim.eval = (code: any, env: any) => {
+         let scriptToRun = code.output || code;
+
+         // Youtubei.js typically provides code that has a `return process(...)` at the end
+         // vm.runInNewContext throws "Illegal return statement" if there is a top-level return.
+         // Let's wrap it in an IIFE
+         if (typeof scriptToRun === 'string' && scriptToRun.includes('return ')) {
+             scriptToRun = `(() => { ${scriptToRun} })()`;
+         }
+
+         return vm.runInNewContext(scriptToRun, env);
+      }
+    }
+
+    const info = await yt.getBasicInfo(videoId)
     const format = info.chooseFormat({
       type: 'video+audio',
       quality: 'best'
     })
 
-    if (!format || !format.url) {
+    let finalUrl = format.url;
+    if (!finalUrl && format.signature_cipher) {
+        finalUrl = await format.decipher(yt.session.player);
+    }
+
+    if (!finalUrl) {
         throw new Error("No format found")
     }
 
-    // Return a direct redirect to avoid proxying the stream and having fetch failures due to YouTube IP protections
-    // Also YouTube's URLs already have the right headers usually
-    return NextResponse.redirect(format.url)
+    return NextResponse.redirect(finalUrl)
   } catch (error: any) {
     console.error('Erreur de téléchargement YouTube:', error)
     return NextResponse.json({ error: 'Impossible de télécharger la vidéo. La protection bot de YouTube bloque peut-être la requête.' }, { status: 500 })

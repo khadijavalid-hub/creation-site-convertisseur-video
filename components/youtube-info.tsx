@@ -95,26 +95,8 @@ export function YoutubeInfo() {
                 onClick={async () => {
                   setDownloadingVideo(true)
                   try {
-                    const res = await fetch(`/api/youtube/download?url=${encodeURIComponent(url)}`, { redirect: 'manual' })
-
-                    if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
-                        // Success, we got the redirect URL
-                        const redirectUrl = res.headers.get('location')!
-                        const a = document.createElement('a')
-                        a.style.display = 'none'
-                        a.href = redirectUrl
-                        a.target = '_blank'
-                        a.download = `${info.title.replace(/[^\w\s]/gi, '')}.mp4`
-                        document.body.appendChild(a)
-                        a.click()
-                        a.remove()
-                    } else if (!res.ok) {
-                      const data = await res.json()
-                      throw new Error(data.error || 'Erreur lors du téléchargement')
-                    } else {
-                        // Fallback just in case we somehow didn't get a redirect but a stream
-                        window.open(`/api/youtube/download?url=${encodeURIComponent(url)}`, '_blank')
-                    }
+                    // Open the download URL in a new tab to let the browser handle the 307 redirect
+                    window.open(`/api/youtube/download?url=${encodeURIComponent(url)}`, '_blank')
                   } catch (err) {
                     setError(err instanceof Error && err.message ? err.message : 'Une erreur est survenue.')
                   } finally {
